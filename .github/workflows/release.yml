@@ -1,9 +1,9 @@
-name: Build datestamp exe
+name: Build utility executables
 
 on:
   push:
     tags:
-      - 'datestamp-v*'
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -20,19 +20,23 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: pip install pyinstaller tkinterdnd2
+        run: pip install pyinstaller -r requirements.txt
 
-      - name: Build exe
-        run: pyinstaller --onefile --windowed --name datestamp datestamp.pyw
+      - name: Build executables
+        shell: pwsh
+        run: |
+          Get-ChildItem -Filter *.pyw | ForEach-Object {
+            python -m PyInstaller --onefile --windowed --name $_.BaseName $_.FullName
+          }
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: datestamp-exe
-          path: dist/datestamp.exe
+          name: utility-executables
+          path: dist/*.exe
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/datestamp.exe
+          files: dist/*.exe
