@@ -30,6 +30,8 @@ jobs:
           Get-ChildItem -Filter *.pyw | ForEach-Object {
             python -m PyInstaller --onefile --windowed --name $_.BaseName $_.FullName
           }
+          python -m PyInstaller --onefile --name imagecompare imagecompare.py
+          python -m PyInstaller --onefile --name ccallseq ccallseq.py
 
       - uses: msys2/setup-msys2@v2
         with:

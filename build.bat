@@ -26,6 +26,22 @@ for %%f in (*.pyw) do (
 )
 
 echo.
+echo Building imagecompare.exe from imagecompare.py...
+python -m PyInstaller --onefile --name imagecompare imagecompare.py
+if errorlevel 1 (
+    echo Failed to build imagecompare.py
+    exit /b 1
+)
+
+echo.
+echo Building ccallseq.exe from ccallseq.py...
+python -m PyInstaller --onefile --name ccallseq ccallseq.py
+if errorlevel 1 (
+    echo Failed to build ccallseq.py
+    exit /b 1
+)
+
+echo.
 echo Moving executables to %~dp0...
 move /Y dist\*.exe "%~dp0" >nul
 if errorlevel 1 (

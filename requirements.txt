@@ -3,3 +3,7 @@ Pillow
 PyPDF2
 pyautogui
 pytesseract
+opencv-python
+scikit-image
+imutils
+grandalf
