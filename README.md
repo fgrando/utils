@@ -14,7 +14,7 @@ Utility tools and scripts
 
   - `paths` — files or directories to scan.
   - `--start` — function to start from. Omit it to print a tree for every function found. If the name was defined in more than one file, a tree is printed per definition unless narrowed down with `NAME(path)` (path matched as a substring, either slash style), e.g. `--start "main(unix/plink.c)"` — copy-paste straight from the tool's own output.
-  - `--show-files` — show the defining file after each function name, e.g. `main(unix/plink.c)`.
+  - `--show-files` — show the defining file after each function name, e.g. `main(unix/plink.c)`. Calls into recognized C/POSIX standard library functions show their declaring header instead, e.g. `memset(string.h)`.
   - `--dot PATH` — write a Graphviz DOT file instead of printing. Render with `dot -Tsvg PATH -o graph.svg`, or import into draw.io (Extras > Edit Diagram).
   - `--drawio PATH` — write a draw.io (mxGraph XML) file, laid out with the pure-Python `grandalf` package (`pip install grandalf` if running from source) — no Graphviz install needed. Open the file directly in draw.io. The layout gets slow beyond roughly a thousand nodes, so narrow the graph with `--start`/`--max-depth` for large codebases.
 

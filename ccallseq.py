@@ -11,14 +11,101 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 # A node identifies one function definition: (name, defining file). Callees
 # that were never seen as a definition (stdlib calls, macros, etc.) are kept
-# as nodes with an empty file, so the tree can still show them as leaves.
+# as leaves: their "file" is the standard header that declares them (best
+# effort, see STDLIB_HEADERS below), or empty if unrecognized.
 NodeKey = Tuple[str, str]
+
+# Best-effort C/POSIX standard library function -> declaring header, used to
+# label call leaves that were never defined in the scanned source.
+_STDLIB_FUNCTIONS_BY_HEADER: Dict[str, Tuple[str, ...]] = {
+    "assert.h": ("assert",),
+    "ctype.h": (
+        "isalnum", "isalpha", "isblank", "iscntrl", "isdigit", "isgraph",
+        "islower", "isprint", "ispunct", "isspace", "isupper", "isxdigit",
+        "tolower", "toupper",
+    ),
+    "locale.h": ("setlocale", "localeconv"),
+    "math.h": (
+        "ceil", "fabs", "floor", "fmod", "pow", "sqrt", "sin", "cos", "tan",
+        "asin", "acos", "atan", "atan2", "exp", "log", "log10", "round", "trunc",
+    ),
+    "setjmp.h": ("setjmp", "longjmp"),
+    "signal.h": ("signal", "raise", "sigaction", "sigemptyset", "sigaddset", "kill"),
+    "stdarg.h": ("va_start", "va_end", "va_arg", "va_copy"),
+    "stdio.h": (
+        "printf", "fprintf", "sprintf", "snprintf", "vprintf", "vfprintf",
+        "vsprintf", "vsnprintf", "scanf", "fscanf", "sscanf", "fopen",
+        "freopen", "fclose", "fflush", "fread", "fwrite", "fseek", "ftell",
+        "rewind", "fgetpos", "fsetpos", "remove", "rename", "tmpfile",
+        "tmpnam", "fgets", "fputs", "fgetc", "fputc", "getc", "putc",
+        "getchar", "putchar", "gets", "puts", "perror", "feof", "ferror",
+        "clearerr",
+    ),
+    "stdlib.h": (
+        "malloc", "calloc", "realloc", "free", "exit", "abort", "atexit",
+        "atoi", "atol", "atoll", "atof", "strtol", "strtoul", "strtoll",
+        "strtoull", "strtod", "rand", "srand", "qsort", "bsearch", "abs",
+        "labs", "llabs", "div", "ldiv", "getenv", "setenv", "unsetenv",
+        "system", "mblen", "mbtowc", "wctomb", "mbstowcs", "wcstombs",
+    ),
+    "string.h": (
+        "memcpy", "memmove", "memset", "memcmp", "memchr", "strcpy",
+        "strncpy", "strcat", "strncat", "strcmp", "strncmp", "strcoll",
+        "strchr", "strrchr", "strspn", "strcspn", "strpbrk", "strstr",
+        "strtok", "strxfrm", "strlen", "strerror", "strdup",
+    ),
+    "time.h": (
+        "time", "clock", "difftime", "mktime", "asctime", "ctime", "gmtime",
+        "localtime", "strftime",
+    ),
+    "wchar.h": (
+        "wcslen", "wcscpy", "wcsncpy", "wcscat", "wcsncat", "wcscmp",
+        "wcsncmp", "wcschr", "wcsrchr", "wcsstr", "wcstok", "wprintf",
+        "fwprintf", "swprintf", "wcstol", "wcstoul", "wcstod",
+    ),
+    # POSIX
+    "unistd.h": (
+        "read", "write", "close", "lseek", "unlink", "rmdir", "access",
+        "chdir", "getcwd", "fork", "execve", "execv", "execvp", "execl",
+        "execlp", "pipe", "dup", "dup2", "sleep", "usleep", "alarm",
+        "getpid", "getppid", "getuid", "geteuid", "getgid", "getegid",
+        "isatty", "gethostname",
+    ),
+    "fcntl.h": ("open", "fcntl", "creat"),
+    "sys/stat.h": ("stat", "fstat", "lstat", "mkdir", "chmod", "umask"),
+    "sys/socket.h": (
+        "socket", "bind", "listen", "accept", "connect", "send", "recv",
+        "sendto", "recvfrom", "shutdown", "setsockopt", "getsockopt",
+        "getsockname", "getpeername",
+    ),
+    "arpa/inet.h": (
+        "inet_addr", "inet_ntoa", "inet_pton", "inet_ntop",
+        "htons", "htonl", "ntohs", "ntohl",
+    ),
+    "pthread.h": (
+        "pthread_create", "pthread_join", "pthread_exit", "pthread_detach",
+        "pthread_mutex_init", "pthread_mutex_destroy", "pthread_mutex_lock",
+        "pthread_mutex_unlock", "pthread_cond_init", "pthread_cond_wait",
+        "pthread_cond_signal", "pthread_cond_broadcast",
+    ),
+    "dirent.h": ("opendir", "readdir", "closedir", "rewinddir"),
+    "poll.h": ("poll",),
+    "sys/select.h": ("select",),
+    "sys/wait.h": ("wait", "waitpid"),
+    "sys/mman.h": ("mmap", "munmap", "mprotect"),
+}
+
+STDLIB_HEADERS: Dict[str, str] = {
+    name: header
+    for header, names in _STDLIB_FUNCTIONS_BY_HEADER.items()
+    for name in names
+}
 
 
 def _iter_c_files(root: Path) -> List[Path]:
@@ -66,7 +153,13 @@ class CFunctionParser:
 
     def _extract_function_definitions(self, text: str) -> List[str]:
         defs: List[str] = []
-        for match in re.finditer(r"(?:^|\n)\s*(?:[A-Za-z_][\w\s\*]+?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{", text):
+        # The separator before the name is whitespace-or-* (not just
+        # whitespace) so pointer-returning functions written as
+        # "Type *name(...)" -- with no space between '*' and the name --
+        # are still recognized, not just "Type* name(...)"/"Type * name(...)".
+        for match in re.finditer(
+            r"(?:^|\n)\s*[A-Za-z_][\w\s\*]*?[\s\*]([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{", text
+        ):
             name = match.group(1)
             if name not in {"if", "for", "while", "switch", "return"}:
                 defs.append(name)
@@ -92,6 +185,10 @@ class CFunctionParser:
 @dataclass
 class CallGraph:
     calls: Dict[NodeKey, Set[NodeKey]]
+    # Nodes that came from an actual function definition in the scanned
+    # source, as opposed to leaves synthesized for unresolved call sites
+    # (stdlib functions labelled with their header, or truly unknown names).
+    defined: Set[NodeKey] = field(default_factory=set)
 
 
 def build_call_graph(paths: List[Path | str]) -> CallGraph:
@@ -103,16 +200,19 @@ def build_call_graph(paths: List[Path | str]) -> CallGraph:
     for path in files:
         parser.parse_file(path)
 
+    defined = set(parser.calls.keys())
+
     # Resolve each call site (a bare name) to every known definition with
     # that name -- this is what keeps same-named functions in different
     # files as distinct branches instead of merging their callees together.
-    # A name with no known definition becomes a leaf node (empty file).
+    # A name with no known definition becomes a leaf node, labelled with its
+    # standard header if it's a recognized stdlib/POSIX function, else empty.
     resolved: Dict[NodeKey, Set[NodeKey]] = {}
     for node, callee_names in parser.calls.items():
         targets: Set[NodeKey] = set()
         for name in callee_names:
             matches = parser.nodes_by_name.get(name)
-            targets.update(matches if matches else {(name, "")})
+            targets.update(matches if matches else {(name, STDLIB_HEADERS.get(name, ""))})
         resolved[node] = targets
 
     changed = True
@@ -124,7 +224,7 @@ def build_call_graph(paths: List[Path | str]) -> CallGraph:
                     resolved[callee] = set()
                     changed = True
 
-    return CallGraph(calls=resolved)
+    return CallGraph(calls=resolved, defined=defined)
 
 
 def _format_node(node: NodeKey, show_files: bool) -> str:
@@ -351,7 +451,7 @@ def main(argv: List[str] | None = None) -> int:
             print(f"Unknown function: {args.start}")
             return 0
     else:
-        starts = sorted(node for node in graph.calls if node[1])
+        starts = sorted(graph.defined)
         if not starts:
             print("No functions found")
             return 0
