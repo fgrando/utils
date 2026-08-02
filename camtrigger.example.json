@@ -1,0 +1,8 @@
+{
+  "source": "rtsp://192.168.1.2:8554/cam",
+  "region": {"x": 100, "y": 50, "width": 300, "height": 200},
+  "reference_image": "reference.bmp",
+  "threshold": 0.5,
+  "timeout": 30,
+  "poll_interval": 0.5
+}
