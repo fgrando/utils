@@ -1,3 +1,5 @@
 tkinterdnd2
 Pillow
 PyPDF2
+pyautogui
+pytesseract

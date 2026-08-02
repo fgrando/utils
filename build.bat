@@ -9,6 +9,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if not exist "Tesseract-OCR\tesseract.exe" (
+    echo Tesseract-OCR directory not found or incomplete.
+    echo Right-click Tesseract-OCR.zip.001 and select "Extract Here" before building screenreader.exe.
+    exit /b 1
+)
+
 for %%f in (*.pyw) do (
     echo.
     echo Building %%~nf.exe from %%f...

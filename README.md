@@ -5,6 +5,7 @@ Utility tools and scripts
 - [datestamp.pyw](datestamp.pyw) — drag & drop files to prepend a live, editable date/time stamp to their filenames.
 - [lowres.pyw](lowres.pyw) — drag & drop images to shrink them (aspect ratio preserved) and save alongside the original with a `_lowres` suffix. Choose how: max size in pixels (default 1024x768), a reduction factor (2x, 5x, etc.), or a max file size in KB (default 100 KB, finds the highest resolution that fits).
 - [pdfmerger.pyw](pdfmerger.pyw) — drag & drop (or add) PDFs, reorder them, and combine into a single output PDF.
+- screenreader.pyw - takes a screenshot and parses the text selected by the user. Uses Tesseract-OCR to convert image to text. Tesseract-OCR is splitted into several zip files. Before running screenreader, right click Tesseract-OCR.zip.001 and select Extract Here. The Tesseract-OCR directory will be created with the expected files already in place. This folder must exist at the same level of screenreader.
 
 ## Serial-to-UDP bridge
 A pair of tools for forwarding a Windows COM port's byte stream over UDP and viewing it on the receiving end.
