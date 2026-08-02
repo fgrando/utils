@@ -31,6 +31,21 @@ jobs:
             python -m PyInstaller --onefile --windowed --name $_.BaseName $_.FullName
           }
 
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc make
+
+      - name: Build C executables
+        shell: msys2 {0}
+        run: |
+          make
+          mkdir -p dist
+          for src in *.c; do
+            cp "${src%.c}.exe" dist/
+          done
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
